@@ -1,6 +1,5 @@
 //donate받은 후 set_priority로 받은 값보다 더 크게 올렸을 시 체크
 
-
 #include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"

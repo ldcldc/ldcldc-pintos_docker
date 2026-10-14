@@ -462,7 +462,8 @@ thread_exit (void) {
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
-	list_remove (&thread_current()->telem);
+	if (thread_mlfqs) {
+        list_remove (&thread_current ()->telem);}
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
@@ -487,6 +488,8 @@ thread_yield (void) {
 
 void
 thread_set_priority (int new_priority) {
+	if (thread_mlfqs) return;
+
     struct thread *curr = thread_current ();
     
     curr->init_priority = new_priority;
@@ -554,7 +557,7 @@ thread_set_nice (int new_nice) {	//인터럽트 꺼야할수도 enum intr_level 
 			if(intr_context())
 				intr_yield_on_return ();
 			else
-				thread_yield();
+				thread_yield();//asdasdasdadasd
         }
     }
 }

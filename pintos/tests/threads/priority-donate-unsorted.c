@@ -1,3 +1,5 @@
+//chain으로 donate 받은 후 set priority로 우선순위 하락시 우선순위 변화 체크 
+
 #include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"

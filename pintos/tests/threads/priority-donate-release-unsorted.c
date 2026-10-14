@@ -1,3 +1,5 @@
+//chain상태에서 donor가 여럿일 때 낮은 우선순위를 가진 donor가 원하는 락 릴리즈 했을 때 우선순위 변화 체크
+
 #include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"
