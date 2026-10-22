@@ -23,6 +23,7 @@ struct lock file_lock;
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void sys_exit (int status);
+void check_valid_buffer (const void *buffer, size_t size, bool is_write);
 
 #define STDIN_FILE ((struct file *) 1)
 #define STDOUT_FILE ((struct file *) 2)
@@ -117,7 +118,7 @@ check_address (void *addr) {
 }
 
 /* 버퍼가 속한 모든 페이지를 한 번씩 읽어서 물리 메모리에 올림(페이지 폴트 유도) */
-void check_valid_buffer (void *buffer, size_t size, bool is_write) {
+void check_valid_buffer (const void *buffer, size_t size, bool is_write) {
     if (size == 0) return;
 
     char *ptr = (char *) buffer;
@@ -129,7 +130,7 @@ void check_valid_buffer (void *buffer, size_t size, bool is_write) {
          * volatile로 선언시 아무 동작도 안하는 변수도 최적화 x */
         volatile char *p = (volatile char *) (ptr + i);
         char dummy = *p;
-        /* write면 권한 체크 */
+        /* write면 권한 체크 (SPT 페이지로 바꿔야함)*/
         if (is_write) {
             *p = dummy;
         }
@@ -315,7 +316,7 @@ sys_filesize (int fd) {
 /* file 데이터 read */
 static int
 sys_read (int fd, void *buffer, unsigned size) {
-    check_valid_buffer (buffer, size, true); 
+    check_valid_buffer (buffer, size, false); 
     struct thread *curr = thread_current ();
 
     init_file_list (curr);
