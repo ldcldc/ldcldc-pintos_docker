@@ -14,6 +14,7 @@
 #include "threads/fixed_point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "threads/malloc.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -113,6 +114,8 @@ yield_in_interrupt (void){
 
 void 
 thread_donate_priority (struct thread *t, int new_priority) {
+	if (thread_mlfqs) return; 
+
     t->priority = new_priority;
 
     if (t->status == THREAD_READY) {
@@ -274,10 +277,10 @@ thread_tick (void) {
 	else
 		kernel_ticks++;
 
-	/* Enforce preemption. */
 	if (thread_mlfqs && t != idle_thread) {
         t->recent_cpu = ADD_FP_INT (t->recent_cpu, 1);}
 
+	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
 }
@@ -363,6 +366,26 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
+
+#ifdef USERPROG
+
+    struct child_status *status = malloc (sizeof (struct child_status));
+    if (status == NULL) {
+        palloc_free_page (t);
+        return TID_ERROR;
+    }
+	t->child_status = status;
+
+    status->tid = tid;
+    status->exit_status = -1;
+    status->ref_cnt = 2;
+    sema_init (&status->wait_sema, 0);
+
+	sema_init (&status->fork_sema, 0);
+    status->fork_success = false;
+
+    list_push_back (&thread_current()->children, &status->elem);
+#endif
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
@@ -490,16 +513,15 @@ void
 thread_set_priority (int new_priority) {
 	if (thread_mlfqs) return;
 
+	enum intr_level old_level = intr_disable (); 
+
     struct thread *curr = thread_current ();
-    
     curr->init_priority = new_priority;
 
     if (new_priority > curr->priority) {
         curr->priority = new_priority;}
-
     else {
         curr->priority = curr->init_priority;
-
 		if (!list_empty (&curr->donors)) {
 			struct list_elem *e;
 			for (e = list_begin(&curr->donors); e != list_end(&curr->donors); e = list_next(e)) {
@@ -514,36 +536,23 @@ thread_set_priority (int new_priority) {
                 thread_yield ();}
         }
     }
+
+	intr_set_level (old_level); 
 }
-
-/* Sets the current thread's priority to NEW_PRIORITY. */
-//priority-donate-raise Fail
-// void
-// thread_set_priority (int new_priority) {
-// 	struct thread *curr = thread_current ();
-
-// 	if (curr->init_priority == curr->priority) {
-// 		curr->priority = new_priority;}
-// 	curr->init_priority = new_priority;
-
-// 	if(!list_empty(&ready_list)){
-// 		if (new_priority < list_entry (list_begin (&ready_list), struct thread, elem)->priority)
-// 			thread_yield();
-// 	}
-// }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
 }
+
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int new_nice) {	//인터럽트 꺼야할수도 enum intr_level old_level = intr_disable (); intr_set_level (old_level);
-    struct thread *curr = thread_current();
-    
-    curr->nice = new_nice;
+thread_set_nice (int new_nice) {
+    enum intr_level old_level = intr_disable (); 
 
+    struct thread *curr = thread_current();
+    curr->nice = new_nice;
     curr->priority = PRI_MAX - FP_TO_INT_RN (DIV_FP_INT (curr->recent_cpu, 4)) - (new_nice * 2);
 
     if (curr->priority > PRI_MAX) {
@@ -554,12 +563,11 @@ thread_set_nice (int new_nice) {	//인터럽트 꺼야할수도 enum intr_level 
     if (!list_empty (&ready_list)) {
         struct thread *highest = list_entry (list_begin (&ready_list), struct thread, elem);
         if (curr->priority < highest->priority) {
-			if(intr_context())
-				intr_yield_on_return ();
-			else
-				thread_yield();//asdasdasdadasd
+			thread_yield();	//항상 시스템콜에서 불림
         }
     }
+
+	intr_set_level (old_level); 
 }
 
 /* Returns the current thread's nice value. */
@@ -578,7 +586,6 @@ thread_get_load_avg (void) {
 int
 thread_get_recent_cpu (void) {
 	return FP_TO_INT_RN (MUL_FP_INT (thread_current ()->recent_cpu, 100));
-	return 0;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -659,6 +666,16 @@ init_thread (struct thread *t, const char *name, int priority) {
         list_push_back (&all_tlist, &t->telem);
         intr_set_level (old_level);
     }
+
+#ifdef USERPROG
+	t->pml4 = NULL; 
+
+	list_init (&t->children);
+	t->fd_capacity = 0;
+	t->file_list = NULL;
+
+	t->exit_status = -1;
+#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -27,6 +28,17 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+struct child_status {
+    tid_t tid;                  /* 자식의 tid */
+    int exit_status;           	/* 자식의 종료 상태 (default:-1) */
+    int ref_cnt;                /* wait_sema대기 수 (default:2) */
+    struct semaphore wait_sema; /* wait()용 세마포어 */
+    struct list_elem elem;
+
+	struct semaphore fork_sema;	/* fork 대기용 + child_status만 아는 부모가 자식을 찾는 용도 */
+    bool fork_success;			/* 성공여부 저장 */
+};
 
 /* A kernel thread or user process.
  *
@@ -111,6 +123,15 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+
+	int exit_status;					/* 종료 상태(default:-1)*/
+
+	struct list children;				/* 자식 리스트 */
+	struct child_status *child_status; 
+
+    struct file **file_list;    		/* 파일 포인터 배열을 가리킬 포인터 */
+    int fd_capacity;            		/* file_list의 capacity */
+	struct file *running_file; 			/* 현재 실행 중인 파일 */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
